@@ -3,7 +3,6 @@ package com.furniture.furniture_backend.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.furniture.furniture_backend.dto.*;
 import com.furniture.furniture_backend.service.ProductService;
-import com.furniture.furniture_backend.service.CategoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -38,9 +37,6 @@ class ProductControllerTest {
 
     @MockBean
     private ProductService productService;
-
-    @MockBean
-    private CategoryService categoryService;
 
     private ProductResponse productResponse;
     private ProductRequest productRequest;
