@@ -17,7 +17,23 @@ const CheckoutPage = () => {
   const navigate = useNavigate();
 
   const currentUserId = user?.id || user?.userId;
+const handleSessionExpired = () => {
+  localStorage.removeItem('token');
+  localStorage.removeItem('user');
+  localStorage.removeItem('accessToken');
+  localStorage.removeItem('authToken');
 
+  showError('⚠️ Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.');
+
+  setTimeout(() => {
+    navigate('/login', { replace: true });
+  }, 800);
+
+  // Dòng này là dự phòng nếu navigate không hoạt động
+  setTimeout(() => {
+    window.location.href = '/login';
+  }, 1200);
+};
   const [formData, setFormData] = useState({
     fullName: user?.fullName || user?.name || '',
     phone: user?.phone || '',
