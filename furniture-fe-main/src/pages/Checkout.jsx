@@ -5,13 +5,15 @@ import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import api from '../api/api';
-import Header from '../components/Header';
 import HeaderPage from '../components/HeaderPage';
 
 const CheckoutPage = () => {
   const { cartItems, clearCart } = useCart();
   const { user } = useAuth();
-  const { success, error } = useToast();
+
+  // Đổi error thành showError để tránh trùng tên với biến lỗi trong catch
+  const { success, error: showError } = useToast();
+
   const navigate = useNavigate();
 
   const currentUserId = user?.id || user?.userId;
@@ -20,7 +22,11 @@ const CheckoutPage = () => {
     fullName: user?.fullName || user?.name || '',
     phone: user?.phone || '',
     email: user?.email || '',
-    address: '', city: '', district: '', ward: '', note: '',
+    address: '',
+    city: '',
+    district: '',
+    ward: '',
+    note: '',
     paymentMethod: 'COD',
     shippingMethod: 'standard'
   });
@@ -32,32 +38,50 @@ const CheckoutPage = () => {
   const [wards, setWards] = useState([]);
   const [loading, setLoading] = useState({ p: false, d: false, w: false });
 
-  const subtotal = cartItems.reduce((total, item) => total + (item.discountPrice || item.price) * item.quantity, 0);
-  const shippingFee = formData.shippingMethod === 'express' ? 80000 : (subtotal > 2000000 ? 0 : 50000);
+  const subtotal = cartItems.reduce(
+    (total, item) => total + (item.discountPrice || item.price) * item.quantity,
+    0
+  );
+
+  const shippingFee =
+    formData.shippingMethod === 'express'
+      ? 80000
+      : subtotal > 2000000
+        ? 0
+        : 50000;
+
   const total = subtotal + shippingFee;
 
-  const formatPrice = (p) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(p);
+  const formatPrice = (p) =>
+    new Intl.NumberFormat('vi-VN', {
+      style: 'currency',
+      currency: 'VND'
+    }).format(p);
 
   useEffect(() => {
     if (!user) {
       navigate('/login');
       return;
     }
+
     if (cartItems.length === 0) {
       navigate('/orders');
       return;
     }
+
     fetchProvinces();
   }, [user, cartItems, navigate]);
 
   const fetchProvinces = async () => {
     try {
       setLoading(prev => ({ ...prev, p: true }));
+
       const response = await fetch('https://provinces.open-api.vn/api/p/');
       const data = await response.json();
+
       setProvinces(data);
-    } catch (error) {
-      console.error('Lỗi khi tải tỉnh thành:', error);
+    } catch (fetchError) {
+      console.error('Lỗi khi tải tỉnh thành:', fetchError);
     } finally {
       setLoading(prev => ({ ...prev, p: false }));
     }
@@ -65,21 +89,34 @@ const CheckoutPage = () => {
 
   const handleProvinceChange = async (e) => {
     const provinceName = e.target.value;
-    setFormData(prev => ({ ...prev, city: provinceName, district: '', ward: '' }));
+
+    setFormData(prev => ({
+      ...prev,
+      city: provinceName,
+      district: '',
+      ward: ''
+    }));
+
     setDistricts([]);
     setWards([]);
 
     if (!provinceName) return;
 
     const selectedProvince = provinces.find(p => p.name === provinceName);
+
     if (selectedProvince) {
       try {
         setLoading(prev => ({ ...prev, d: true }));
-        const response = await fetch(`https://provinces.open-api.vn/api/p/${selectedProvince.code}?depth=2`);
+
+        const response = await fetch(
+          `https://provinces.open-api.vn/api/p/${selectedProvince.code}?depth=2`
+        );
+
         const data = await response.json();
+
         setDistricts(data.districts || []);
-      } catch (error) {
-        console.error('Lỗi khi tải quận huyện:', error);
+      } catch (fetchError) {
+        console.error('Lỗi khi tải quận huyện:', fetchError);
       } finally {
         setLoading(prev => ({ ...prev, d: false }));
       }
@@ -88,20 +125,32 @@ const CheckoutPage = () => {
 
   const handleDistrictChange = async (e) => {
     const districtName = e.target.value;
-    setFormData(prev => ({ ...prev, district: districtName, ward: '' }));
+
+    setFormData(prev => ({
+      ...prev,
+      district: districtName,
+      ward: ''
+    }));
+
     setWards([]);
 
     if (!districtName) return;
 
     const selectedDistrict = districts.find(d => d.name === districtName);
+
     if (selectedDistrict) {
       try {
         setLoading(prev => ({ ...prev, w: true }));
-        const response = await fetch(`https://provinces.open-api.vn/api/d/${selectedDistrict.code}?depth=2`);
+
+        const response = await fetch(
+          `https://provinces.open-api.vn/api/d/${selectedDistrict.code}?depth=2`
+        );
+
         const data = await response.json();
+
         setWards(data.wards || []);
-      } catch (error) {
-        console.error('Lỗi khi tải phường xã:', error);
+      } catch (fetchError) {
+        console.error('Lỗi khi tải phường xã:', fetchError);
       } finally {
         setLoading(prev => ({ ...prev, w: false }));
       }
@@ -110,40 +159,75 @@ const CheckoutPage = () => {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-    if (errors[name]) setErrors(prev => ({ ...prev, [name]: '' }));
+
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+
+    if (errors[name]) {
+      setErrors(prev => ({
+        ...prev,
+        [name]: ''
+      }));
+    }
   };
 
   const validateForm = () => {
     const newErrors = {};
-    if (!formData.fullName.trim()) newErrors.fullName = 'Vui lòng nhập họ tên';
-    if (!formData.phone.trim()) newErrors.phone = 'Vui lòng nhập số điện thoại';
-    else if (!/^[0-9]{10}$/.test(formData.phone.replace(/\s/g, ''))) {
+
+    if (!formData.fullName.trim()) {
+      newErrors.fullName = 'Vui lòng nhập họ tên';
+    }
+
+    if (!formData.phone.trim()) {
+      newErrors.phone = 'Vui lòng nhập số điện thoại';
+    } else if (!/^[0-9]{10}$/.test(formData.phone.replace(/\s/g, ''))) {
       newErrors.phone = 'Số điện thoại không hợp lệ';
     }
-    if (!formData.email.trim()) newErrors.email = 'Vui lòng nhập email';
-    else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+
+    if (!formData.email.trim()) {
+      newErrors.email = 'Vui lòng nhập email';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Email không hợp lệ';
     }
-    if (!formData.address.trim()) newErrors.address = 'Vui lòng nhập địa chỉ';
-    if (!formData.city) newErrors.city = 'Vui lòng chọn Tỉnh/Thành phố';
-    if (!formData.district) newErrors.district = 'Vui lòng chọn Quận/Huyện';
-    if (!formData.ward) newErrors.ward = 'Vui lòng chọn Phường/Xã';
+
+    if (!formData.address.trim()) {
+      newErrors.address = 'Vui lòng nhập địa chỉ';
+    }
+
+    if (!formData.city) {
+      newErrors.city = 'Vui lòng chọn Tỉnh/Thành phố';
+    }
+
+    if (!formData.district) {
+      newErrors.district = 'Vui lòng chọn Quận/Huyện';
+    }
+
+    if (!formData.ward) {
+      newErrors.ward = 'Vui lòng chọn Phường/Xã';
+    }
 
     setErrors(newErrors);
+
     return Object.keys(newErrors).length === 0;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (!validateForm()) {
-      error("❌ Vui lòng điền đầy đủ thông tin!");
+      showError('❌ Vui lòng điền đầy đủ thông tin!');
       return;
     }
 
     if (!currentUserId) {
-      error("⚠️ Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.");
-      navigate('/login');
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+
+      showError('⚠️ Phiên đăng nhập hết hạn, vui lòng đăng nhập lại.');
+      navigate('/login', { replace: true });
+
       return;
     }
 
@@ -151,8 +235,12 @@ const CheckoutPage = () => {
 
     try {
       const fullAddress = `${formData.address}, ${formData.ward}, ${formData.district}, ${formData.city}`;
+
       const orderData = {
-        items: cartItems.map(item => ({ productId: item.id, quantity: item.quantity })),
+        items: cartItems.map(item => ({
+          productId: item.id,
+          quantity: item.quantity
+        })),
         paymentMethod: formData.paymentMethod,
         shippingAddress: fullAddress,
         recipientName: formData.fullName,
@@ -167,25 +255,56 @@ const CheckoutPage = () => {
       // 2. Nếu chọn VNPay, lấy link và chuyển hướng
       if (formData.paymentMethod === 'VNPAY') {
         const paymentResponse = await api.get(`/payment/vnpay/create-url/${orderId}`);
+
         if (paymentResponse.data.success) {
-          success("✅ Đơn hàng đã được tạo! Chuyển hướng đến trang thanh toán...");
+          success('✅ Đơn hàng đã được tạo! Chuyển hướng đến trang thanh toán...');
+
           setTimeout(() => {
             window.location.href = paymentResponse.data.data;
           }, 1500);
+
           return;
         }
       }
 
       // 3. Nếu là COD thì xử lý như cũ
       clearCart();
-      success("✅ Đặt hàng thành công! Cảm ơn bạn đã mua hàng!");
+
+      success('✅ Đặt hàng thành công! Cảm ơn bạn đã mua hàng!');
+
       setTimeout(() => {
         navigate(`/orders/${orderId}`);
       }, 1500);
 
     } catch (err) {
       console.error('Lỗi khi đặt hàng:', err);
-      error("❌ " + (err.response?.data?.message || 'Phiên đăng nhập hết hạn (Lỗi 403). Vui lòng đăng xuất và đăng nhập lại.'));
+
+      const status = err.response?.status;
+
+      // Xử lý riêng lỗi token hết hạn hoặc không có quyền
+      if (status === 401 || status === 403) {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+
+        showError('⚠️ Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại.');
+
+        navigate('/login', {
+          replace: true,
+          state: { from: '/checkout' }
+        });
+
+        return;
+      }
+
+      // Xử lý lỗi khác
+      showError(
+        '❌ ' +
+        (
+          err.response?.data?.message ||
+          'Đặt hàng thất bại. Vui lòng kiểm tra lại thông tin.'
+        )
+      );
+
     } finally {
       setIsSubmitting(false);
     }
@@ -198,6 +317,7 @@ const CheckoutPage = () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       <HeaderPage />
+
       <div className="bg-white border-b border-gray-100 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4">
           <button
@@ -211,61 +331,75 @@ const CheckoutPage = () => {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* User Info Banner */}
         {user && (
           <div className="mb-6 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-3xl p-6 text-white shadow-xl">
             <div className="flex items-center gap-4">
               <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
                 <User size={32} />
               </div>
+
               <div>
-                <h3 className="text-xl font-bold">Xin chào, {user.fullName || user.name || 'Khách hàng'}!</h3>
+                <h3 className="text-xl font-bold">
+                  Xin chào, {user.fullName || user.name || 'Khách hàng'}!
+                </h3>
                 <p className="text-blue-100">Thông tin của bạn đã được điền sẵn</p>
               </div>
             </div>
           </div>
         )}
 
-        {/* Progress Steps */}
         <div className="mb-10">
           <div className="flex items-center justify-center gap-4">
             <div className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold shadow-lg">
                 <CheckCircle size={20} />
               </div>
-              <span className="text-sm font-semibold text-gray-700 hidden sm:inline">Giỏ hàng</span>
+              <span className="text-sm font-semibold text-gray-700 hidden sm:inline">
+                Giỏ hàng
+              </span>
             </div>
+
             <div className="w-16 h-1 bg-blue-600 rounded"></div>
+
             <div className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold shadow-lg">
                 2
               </div>
-              <span className="text-sm font-semibold text-blue-600 hidden sm:inline">Thanh toán</span>
+              <span className="text-sm font-semibold text-blue-600 hidden sm:inline">
+                Thanh toán
+              </span>
             </div>
+
             <div className="w-16 h-1 bg-gray-200 rounded"></div>
+
             <div className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-400 font-bold">
                 3
               </div>
-              <span className="text-sm font-semibold text-gray-400 hidden sm:inline">Hoàn tất</span>
+              <span className="text-sm font-semibold text-gray-400 hidden sm:inline">
+                Hoàn tất
+              </span>
             </div>
           </div>
         </div>
 
         <form onSubmit={handleSubmit}>
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left Column - Form */}
             <div className="lg:col-span-2 space-y-6">
 
-              {/* Contact Info */}
               <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100">
                 <div className="flex items-center gap-4 mb-6">
                   <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg">
                     <User size={24} className="text-white" />
                   </div>
+
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Thông tin liên hệ</h2>
-                    <p className="text-sm text-gray-500">Nhập thông tin để nhận hàng</p>
+                    <h2 className="text-2xl font-bold text-gray-900">
+                      Thông tin liên hệ
+                    </h2>
+                    <p className="text-sm text-gray-500">
+                      Nhập thông tin để nhận hàng
+                    </p>
                   </div>
                 </div>
 
@@ -275,6 +409,7 @@ const CheckoutPage = () => {
                       <User size={16} />
                       Họ và tên <span className="text-red-500">*</span>
                     </label>
+
                     <input
                       type="text"
                       name="fullName"
@@ -283,7 +418,12 @@ const CheckoutPage = () => {
                       className={`w-full px-5 py-4 border-2 ${errors.fullName ? 'border-red-300 bg-red-50' : 'border-gray-200'} rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all text-gray-800 font-medium`}
                       placeholder="Nguyễn Văn A"
                     />
-                    {errors.fullName && <p className="text-red-500 text-sm mt-2 flex items-center gap-1">⚠️ {errors.fullName}</p>}
+
+                    {errors.fullName && (
+                      <p className="text-red-500 text-sm mt-2 flex items-center gap-1">
+                        ⚠️ {errors.fullName}
+                      </p>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -292,6 +432,7 @@ const CheckoutPage = () => {
                         <Phone size={16} />
                         Số điện thoại <span className="text-red-500">*</span>
                       </label>
+
                       <input
                         type="tel"
                         name="phone"
@@ -300,7 +441,12 @@ const CheckoutPage = () => {
                         className={`w-full px-5 py-4 border-2 ${errors.phone ? 'border-red-300 bg-red-50' : 'border-gray-200'} rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all text-gray-800 font-medium`}
                         placeholder="0901234567"
                       />
-                      {errors.phone && <p className="text-red-500 text-sm mt-2 flex items-center gap-1">⚠️ {errors.phone}</p>}
+
+                      {errors.phone && (
+                        <p className="text-red-500 text-sm mt-2 flex items-center gap-1">
+                          ⚠️ {errors.phone}
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -308,6 +454,7 @@ const CheckoutPage = () => {
                         <Mail size={16} />
                         Email <span className="text-red-500">*</span>
                       </label>
+
                       <input
                         type="email"
                         name="email"
@@ -316,28 +463,40 @@ const CheckoutPage = () => {
                         className={`w-full px-5 py-4 border-2 ${errors.email ? 'border-red-300 bg-red-50' : 'border-gray-200'} rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all text-gray-800 font-medium`}
                         placeholder="email@example.com"
                       />
-                      {errors.email && <p className="text-red-500 text-sm mt-2 flex items-center gap-1">⚠️ {errors.email}</p>}
+
+                      {errors.email && (
+                        <p className="text-red-500 text-sm mt-2 flex items-center gap-1">
+                          ⚠️ {errors.email}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Shipping Address */}
               <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100">
                 <div className="flex items-center gap-4 mb-6">
                   <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-2xl flex items-center justify-center shadow-lg">
                     <MapPin size={24} className="text-white" />
                   </div>
+
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Địa chỉ giao hàng</h2>
-                    <p className="text-sm text-gray-500">Chọn địa chỉ nhận hàng chính xác</p>
+                    <h2 className="text-2xl font-bold text-gray-900">
+                      Địa chỉ giao hàng
+                    </h2>
+                    <p className="text-sm text-gray-500">
+                      Chọn địa chỉ nhận hàng chính xác
+                    </p>
                   </div>
                 </div>
 
                 <div className="space-y-5">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">Tỉnh/Thành phố <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">
+                        Tỉnh/Thành phố <span className="text-red-500">*</span>
+                      </label>
+
                       <select
                         name="city"
                         value={formData.city}
@@ -345,16 +504,29 @@ const CheckoutPage = () => {
                         disabled={loading.p}
                         className={`w-full px-5 py-4 border-2 ${errors.city ? 'border-red-300 bg-red-50' : 'border-gray-200'} rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all text-gray-800 font-medium`}
                       >
-                        <option value="">{loading.p ? 'Đang tải...' : 'Chọn Tỉnh/TP'}</option>
+                        <option value="">
+                          {loading.p ? 'Đang tải...' : 'Chọn Tỉnh/TP'}
+                        </option>
+
                         {provinces.map(p => (
-                          <option key={p.code} value={p.name}>{p.name}</option>
+                          <option key={p.code} value={p.name}>
+                            {p.name}
+                          </option>
                         ))}
                       </select>
-                      {errors.city && <p className="text-red-500 text-sm mt-2">⚠️ {errors.city}</p>}
+
+                      {errors.city && (
+                        <p className="text-red-500 text-sm mt-2">
+                          ⚠️ {errors.city}
+                        </p>
+                      )}
                     </div>
 
                     <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">Quận/Huyện <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">
+                        Quận/Huyện <span className="text-red-500">*</span>
+                      </label>
+
                       <select
                         name="district"
                         value={formData.district}
@@ -362,16 +534,29 @@ const CheckoutPage = () => {
                         disabled={!formData.city || loading.d}
                         className={`w-full px-5 py-4 border-2 ${errors.district ? 'border-red-300 bg-red-50' : 'border-gray-200'} rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all text-gray-800 font-medium disabled:bg-gray-100`}
                       >
-                        <option value="">{loading.d ? 'Đang tải...' : 'Chọn Quận/Huyện'}</option>
+                        <option value="">
+                          {loading.d ? 'Đang tải...' : 'Chọn Quận/Huyện'}
+                        </option>
+
                         {districts.map(d => (
-                          <option key={d.code} value={d.name}>{d.name}</option>
+                          <option key={d.code} value={d.name}>
+                            {d.name}
+                          </option>
                         ))}
                       </select>
-                      {errors.district && <p className="text-red-500 text-sm mt-2">⚠️ {errors.district}</p>}
+
+                      {errors.district && (
+                        <p className="text-red-500 text-sm mt-2">
+                          ⚠️ {errors.district}
+                        </p>
+                      )}
                     </div>
 
                     <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">Phường/Xã <span className="text-red-500">*</span></label>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">
+                        Phường/Xã <span className="text-red-500">*</span>
+                      </label>
+
                       <select
                         name="ward"
                         value={formData.ward}
@@ -379,17 +564,30 @@ const CheckoutPage = () => {
                         disabled={!formData.district || loading.w}
                         className={`w-full px-5 py-4 border-2 ${errors.ward ? 'border-red-300 bg-red-50' : 'border-gray-200'} rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all text-gray-800 font-medium disabled:bg-gray-100`}
                       >
-                        <option value="">{loading.w ? 'Đang tải...' : 'Chọn Phường/Xã'}</option>
+                        <option value="">
+                          {loading.w ? 'Đang tải...' : 'Chọn Phường/Xã'}
+                        </option>
+
                         {wards.map(w => (
-                          <option key={w.code} value={w.name}>{w.name}</option>
+                          <option key={w.code} value={w.name}>
+                            {w.name}
+                          </option>
                         ))}
                       </select>
-                      {errors.ward && <p className="text-red-500 text-sm mt-2">⚠️ {errors.ward}</p>}
+
+                      {errors.ward && (
+                        <p className="text-red-500 text-sm mt-2">
+                          ⚠️ {errors.ward}
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Địa chỉ cụ thể <span className="text-red-500">*</span></label>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      Địa chỉ cụ thể <span className="text-red-500">*</span>
+                    </label>
+
                     <input
                       type="text"
                       name="address"
@@ -398,11 +596,19 @@ const CheckoutPage = () => {
                       className={`w-full px-5 py-4 border-2 ${errors.address ? 'border-red-300 bg-red-50' : 'border-gray-200'} rounded-2xl focus:ring-4 focus:ring-blue-100 focus:border-blue-500 outline-none transition-all text-gray-800 font-medium`}
                       placeholder="Số nhà, tên đường..."
                     />
-                    {errors.address && <p className="text-red-500 text-sm mt-2">⚠️ {errors.address}</p>}
+
+                    {errors.address && (
+                      <p className="text-red-500 text-sm mt-2">
+                        ⚠️ {errors.address}
+                      </p>
+                    )}
                   </div>
 
                   <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">Ghi chú</label>
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      Ghi chú
+                    </label>
+
                     <textarea
                       name="note"
                       value={formData.note}
@@ -415,15 +621,19 @@ const CheckoutPage = () => {
                 </div>
               </div>
 
-              {/* Payment Method */}
               <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100">
                 <div className="flex items-center gap-4 mb-6">
                   <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-pink-600 rounded-2xl flex items-center justify-center shadow-lg">
                     <CreditCard size={24} className="text-white" />
                   </div>
+
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Phương thức thanh toán</h2>
-                    <p className="text-sm text-gray-500">Chọn cách thanh toán phù hợp</p>
+                    <h2 className="text-2xl font-bold text-gray-900">
+                      Phương thức thanh toán
+                    </h2>
+                    <p className="text-sm text-gray-500">
+                      Chọn cách thanh toán phù hợp
+                    </p>
                   </div>
                 </div>
 
@@ -437,13 +647,24 @@ const CheckoutPage = () => {
                       onChange={handleChange}
                       className="w-5 h-5 text-blue-600"
                     />
+
                     <div className="flex-1">
-                      <p className="font-bold text-gray-900">Thanh toán khi nhận hàng (COD)</p>
-                      <p className="text-sm text-gray-500">Thanh toán bằng tiền mặt khi nhận hàng</p>
+                      <p className="font-bold text-gray-900">
+                        Thanh toán khi nhận hàng (COD)
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Thanh toán bằng tiền mặt khi nhận hàng
+                      </p>
                     </div>
                   </label>
 
-                  <label className={`flex items-center gap-4 p-4 border-2 rounded-2xl cursor-pointer transition-all ${formData.paymentMethod === 'VNPAY' ? 'border-blue-500 bg-blue-50' : 'border-gray-100 hover:bg-gray-50'}`}>
+                  <label
+                    className={`flex items-center gap-4 p-4 border-2 rounded-2xl cursor-pointer transition-all ${
+                      formData.paymentMethod === 'VNPAY'
+                        ? 'border-blue-500 bg-blue-50'
+                        : 'border-gray-100 hover:bg-gray-50'
+                    }`}
+                  >
                     <input
                       type="radio"
                       name="paymentMethod"
@@ -452,27 +673,38 @@ const CheckoutPage = () => {
                       onChange={handleChange}
                       className="w-5 h-5 text-blue-600"
                     />
+
                     <div className="w-12 h-8 flex items-center justify-center bg-white rounded border">
-                      {/* Thay thế bằng icon VNPay nếu bạn có, hoặc dùng icon card */}
-                      <span className="text-[10px] font-bold text-blue-700">VNPAY</span>
+                      <span className="text-[10px] font-bold text-blue-700">
+                        VNPAY
+                      </span>
                     </div>
+
                     <div className="flex-1">
-                      <p className="font-bold text-gray-900">Thanh toán qua VNPay</p>
-                      <p className="text-sm text-gray-500">Thẻ ATM, Visa, Master, QR Code</p>
+                      <p className="font-bold text-gray-900">
+                        Thanh toán qua VNPay
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Thẻ ATM, Visa, Master, QR Code
+                      </p>
                     </div>
                   </label>
                 </div>
               </div>
 
-              {/* Shipping Method */}
               <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100">
                 <div className="flex items-center gap-4 mb-6">
                   <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-2xl flex items-center justify-center shadow-lg">
                     <Truck size={24} className="text-white" />
                   </div>
+
                   <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Phương thức vận chuyển</h2>
-                    <p className="text-sm text-gray-500">Chọn cách giao hàng</p>
+                    <h2 className="text-2xl font-bold text-gray-900">
+                      Phương thức vận chuyển
+                    </h2>
+                    <p className="text-sm text-gray-500">
+                      Chọn cách giao hàng
+                    </p>
                   </div>
                 </div>
 
@@ -486,12 +718,21 @@ const CheckoutPage = () => {
                       onChange={handleChange}
                       className="w-5 h-5 text-blue-600"
                     />
+
                     <Clock size={24} className="text-blue-600" />
+
                     <div className="flex-1">
-                      <p className="font-bold text-gray-900">Giao hàng tiêu chuẩn</p>
-                      <p className="text-sm text-gray-500">Giao trong 3-5 ngày</p>
+                      <p className="font-bold text-gray-900">
+                        Giao hàng tiêu chuẩn
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Giao trong 3-5 ngày
+                      </p>
                     </div>
-                    <p className="font-bold text-blue-600">{subtotal > 2000000 ? 'Miễn phí' : formatPrice(50000)}</p>
+
+                    <p className="font-bold text-blue-600">
+                      {subtotal > 2000000 ? 'Miễn phí' : formatPrice(50000)}
+                    </p>
                   </label>
 
                   <label className="flex items-center gap-4 p-4 border-2 rounded-2xl cursor-pointer hover:bg-blue-50 transition-colors">
@@ -503,21 +744,31 @@ const CheckoutPage = () => {
                       onChange={handleChange}
                       className="w-5 h-5 text-blue-600"
                     />
+
                     <Zap size={24} className="text-orange-600" />
+
                     <div className="flex-1">
-                      <p className="font-bold text-gray-900">Giao hàng nhanh</p>
-                      <p className="text-sm text-gray-500">Giao trong 1-2 ngày</p>
+                      <p className="font-bold text-gray-900">
+                        Giao hàng nhanh
+                      </p>
+                      <p className="text-sm text-gray-500">
+                        Giao trong 1-2 ngày
+                      </p>
                     </div>
-                    <p className="font-bold text-orange-600">{formatPrice(80000)}</p>
+
+                    <p className="font-bold text-orange-600">
+                      {formatPrice(80000)}
+                    </p>
                   </label>
                 </div>
               </div>
             </div>
 
-            {/* Right Column - Order Summary */}
             <div className="lg:col-span-1">
               <div className="bg-white rounded-3xl p-8 shadow-xl border border-gray-100 sticky top-24">
-                <h2 className="text-2xl font-bold text-gray-900 mb-6">Đơn hàng của bạn</h2>
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">
+                  Đơn hàng của bạn
+                </h2>
 
                 <div className="space-y-4 mb-6 max-h-64 overflow-y-auto">
                   {cartItems.map(item => (
@@ -527,10 +778,17 @@ const CheckoutPage = () => {
                         alt={item.name}
                         className="w-16 h-16 object-cover rounded-xl"
                       />
+
                       <div className="flex-1">
-                        <p className="font-bold text-gray-900 text-sm leading-tight">{item.name}</p>
-                        <p className="text-sm text-gray-600 mt-1">x{item.quantity}</p>
-                        <p className="font-bold text-blue-600 mt-1">{formatPrice(item.discountPrice || item.price)}</p>
+                        <p className="font-bold text-gray-900 text-sm leading-tight">
+                          {item.name}
+                        </p>
+                        <p className="text-sm text-gray-600 mt-1">
+                          x{item.quantity}
+                        </p>
+                        <p className="font-bold text-blue-600 mt-1">
+                          {formatPrice(item.discountPrice || item.price)}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -541,13 +799,25 @@ const CheckoutPage = () => {
                     <span className="font-medium">Tạm tính</span>
                     <span className="font-bold">{formatPrice(subtotal)}</span>
                   </div>
+
                   <div className="flex justify-between text-gray-700">
                     <span className="font-medium">Phí vận chuyển</span>
-                    <span className="font-bold">{shippingFee === 0 ? <span className="text-green-600">Miễn phí</span> : formatPrice(shippingFee)}</span>
+                    <span className="font-bold">
+                      {shippingFee === 0 ? (
+                        <span className="text-green-600">Miễn phí</span>
+                      ) : (
+                        formatPrice(shippingFee)
+                      )}
+                    </span>
                   </div>
+
                   <div className="border-t-2 border-gray-200 pt-4 flex justify-between items-center">
-                    <span className="text-xl font-bold text-gray-900">Tổng cộng</span>
-                    <span className="text-2xl font-black text-blue-600">{formatPrice(total)}</span>
+                    <span className="text-xl font-bold text-gray-900">
+                      Tổng cộng
+                    </span>
+                    <span className="text-2xl font-black text-blue-600">
+                      {formatPrice(total)}
+                    </span>
                   </div>
                 </div>
 
@@ -568,28 +838,37 @@ const CheckoutPage = () => {
                     </>
                   )}
                 </button>
+
                 <p className="text-xs text-gray-500 text-center mt-4">
                   Bằng việc đặt hàng, bạn đồng ý với điều khoản sử dụng của chúng tôi
                 </p>
-                {/* Trust Badges */}
+
                 <div className="mt-6 grid grid-cols-3 gap-2">
                   <div className="flex flex-col items-center text-center">
                     <div className="w-10 h-10 bg-blue-50 rounded-full flex items-center justify-center text-blue-600 mb-2">
                       <CheckCircle size={20} />
                     </div>
-                    <span className="text-[10px] font-medium text-gray-500">Chính hãng 100%</span>
+                    <span className="text-[10px] font-medium text-gray-500">
+                      Chính hãng 100%
+                    </span>
                   </div>
+
                   <div className="flex flex-col items-center text-center">
                     <div className="w-10 h-10 bg-green-50 rounded-full flex items-center justify-center text-green-600 mb-2">
                       <Truck size={20} />
                     </div>
-                    <span className="text-[10px] font-medium text-gray-500">Giao hàng nhanh</span>
+                    <span className="text-[10px] font-medium text-gray-500">
+                      Giao hàng nhanh
+                    </span>
                   </div>
+
                   <div className="flex flex-col items-center text-center">
                     <div className="w-10 h-10 bg-purple-50 rounded-full flex items-center justify-center text-purple-600 mb-2">
                       <CreditCard size={20} />
                     </div>
-                    <span className="text-[10px] font-medium text-gray-500">Bảo mật thanh toán</span>
+                    <span className="text-[10px] font-medium text-gray-500">
+                      Bảo mật thanh toán
+                    </span>
                   </div>
                 </div>
               </div>
@@ -598,7 +877,6 @@ const CheckoutPage = () => {
         </form>
       </div>
 
-      {/* Footer đơn giản cho trang checkout */}
       <footer className="py-8 border-t border-gray-200 mt-12">
         <div className="max-w-7xl mx-auto px-4 text-center">
           <p className="text-gray-500 text-sm">
